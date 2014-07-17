@@ -15,6 +15,7 @@ var demo = {};
     };
 
     var thingList = React.createClass({
+        displayName: "thingList",
         render: function() {
             var things;
 
@@ -33,6 +34,7 @@ var demo = {};
     });
 
     var thingGenerator = React.createClass({
+        displayName: "thingGenerator",
         getInitialState: function() {
             return {value: ""};
         },
@@ -55,6 +57,7 @@ var demo = {};
     });
 
     var things = React.createClass({
+        displayName: "things",
         render: function() {
             return React.DOM.div({}, 
                     React.DOM.h1({}),
