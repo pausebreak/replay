@@ -2,17 +2,76 @@ var demo = {};
 
 (function (ns) {
 
-    var thingHolder = [];
+    var replays = [];
 
-    var globalState = {things: thingHolder};
+    var globalState = {things: [], replayIdx: -1};
+
+    var saveReplayState = function(state) {
+        replays.push(state);
+    };
+    var replayState = function(idx) {
+        pipeline(replays[idx]);
+    };
+    var replayLength = function() {
+        return replays.length;
+    };
+
+    var merge = function(a, b) {
+        var key, c = {};
+
+        for (key in a) { c[key] = a[key]; }
+        for (key in b) { c[key] = b[key]; }
+
+        return c;
+    };
+
+    // this gets around immutability for now
+    var clone = function(subject) {
+        var i, 
+            newObj = (subject instanceof Array) ? [] : {};
+
+        for (i in subject) {
+            if (typeof subject[i] == "object" || typeof subject == "array") {
+                newObj[i] = clone(subject[i]);
+            } else {
+                newObj[i] = subject[i];
+            } 
+        }
+        return newObj;
+    };
 
     var updateState = function(aMap) {
-        var key;
+        var key, newState;
+
+        globalState["replayIdx"] = globalState["replayIdx"]+1;
+        
         for (key in aMap) {
-           globalState[key] = aMap[key]; 
+            globalState[key] = aMap[key]; 
         }
-        ns.main();
+
+        newState = clone(globalState);
+
+        // the magic
+        saveReplayState(newState);
+
+        pipeline(newState);
     };
+
+    var replay = React.createClass({
+        displayName: "replay",
+        propTypes: {
+            goBack: React.PropTypes.func.isRequired,
+            goForward: React.PropTypes.func.isRequired
+        },
+        render: function() {
+            return React.DOM.div({className: "replay"},
+                React.DOM.div({}, "Available Replays: " + this.props.totalReplays),
+                React.DOM.button({onClick: this.props.goBack}, "<"),
+                React.DOM.span({}, this.props.replayIdx),
+                React.DOM.button({onClick: this.props.goForward}, ">")
+            );
+        }
+    });
 
     var thingList = React.createClass({
         displayName: "thingList",
@@ -66,20 +125,39 @@ var demo = {};
         }
     });
 
-    var pipeline = function(state) {
+    var pipeline = function(data) {
         React.renderComponent(
-            things({things: state.things, 
+            things({things: data.things, 
                     createThing: function(thing) {
-                        thingHolder.push(thing);
-                        updateState({things: thingHolder});
+                        var things = clone(data.things);
+                        things.push(thing);
+                        updateState({things: things});
                     }
             }), 
             document.getElementById('game')
         );
+
+        React.renderComponent(
+            replay({totalReplays: replayLength(),
+                    replayIdx: data.replayIdx,
+                    goBack: function() {
+                        var newIdx = data.replayIdx-1;
+                        // hit the bottom ?
+                        if (newIdx < -1) { return; }
+                        pipeline(merge(replays[newIdx], {replayIdx: newIdx}));
+                    },
+                    goForward: function() {
+                        var newIdx = data.replayIdx+1;
+                        // hit the top?
+                        if (newIdx >= replayLength()) { return; }
+                        pipeline(merge(replays[newIdx], {replayIdx: newIdx}));
+                    } 
+            }),
+            document.getElementById('replay')
+        );
     };
  
     ns.main = function() {
-        console.log("ns.main called", globalState);
         pipeline(globalState);
     };
 
