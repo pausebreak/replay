@@ -1,20 +1,14 @@
-var demo = {};
+var demo = demo || {};
+demo.replay = demo.replay || {};
 
-(function (ns) {
+(function (ns, replay) {
+    var globalState = {things: [], replayIdx: 0};
 
-    var replays = [];
-
-    var globalState = {things: [], replayIdx: -1};
-
-    var saveReplayState = function(state) {
-        replays.push(state);
-    };
-    var replayState = function(idx) {
-        pipeline(replays[idx]);
-    };
-    var replayLength = function() {
-        return replays.length;
-    };
+    var lastUnique=0;
+    var nextUnique = function() {
+        lastUnique = lastUnique+1;
+        return lastUnique;
+    }
 
     var merge = function(a, b) {
         var key, c = {};
@@ -25,7 +19,7 @@ var demo = {};
         return c;
     };
 
-    // this gets around immutability for now
+    // this gets around mutability for now
     var clone = function(subject) {
         var i, 
             newObj = (subject instanceof Array) ? [] : {};
@@ -43,44 +37,32 @@ var demo = {};
     var updateState = function(aMap) {
         var key, newState;
 
-        globalState["replayIdx"] = globalState["replayIdx"]+1;
-        
         for (key in aMap) {
             globalState[key] = aMap[key]; 
         }
-
+        
         newState = clone(globalState);
 
+        // seeds the next state?  this needs to go away :(
+        globalState.replayIdx = globalState.replayIdx+1;
+
         // the magic
-        saveReplayState(newState);
+        replay.save(newState);
 
         pipeline(newState);
     };
 
-    var replay = React.createClass({
-        displayName: "replay",
-        propTypes: {
-            goBack: React.PropTypes.func.isRequired,
-            goForward: React.PropTypes.func.isRequired
-        },
-        render: function() {
-            return React.DOM.div({className: "replay"},
-                React.DOM.div({}, "Available Replays: " + this.props.totalReplays),
-                React.DOM.button({onClick: this.props.goBack}, "<"),
-                React.DOM.span({}, this.props.replayIdx),
-                React.DOM.button({onClick: this.props.goForward}, ">")
-            );
-        }
-    });
-
     var thingList = React.createClass({
+        propTypes: {
+            things: React.PropTypes.array.isRequired
+        },
         displayName: "thingList",
         render: function() {
             var things;
 
-            if (this.props.things && this.props.things.length) {
+            if (this.props.things.length) {
                 things = React.DOM.ol({}, this.props.things.map(function(thing) {
-                    return React.DOM.li({key: thing}, thing);
+                    return React.DOM.li({key: thing["key"]}, thing["name"]);
                 }));
             } else {
                 things = "nothing :(";
@@ -128,40 +110,43 @@ var demo = {};
     var pipeline = function(data) {
         React.renderComponent(
             things({things: data.things, 
-                    createThing: function(thing) {
+                    createThing: function(name) {
                         var things = clone(data.things);
-                        things.push(thing);
+                        things.push({name: name, key: nextUnique()});
                         updateState({things: things});
                     }
             }), 
-            document.getElementById('game')
+            document.getElementById('things')
         );
 
         React.renderComponent(
-            replay({totalReplays: replayLength(),
-                    replayIdx: data.replayIdx,
-                    goBack: function() {
-                        var newIdx = data.replayIdx-1;
-                        // hit the bottom ?
-                        if (newIdx < -1) { return; }
-                        pipeline(merge(replays[newIdx], {replayIdx: newIdx}));
-                    },
-                    goForward: function() {
-                        var newIdx = data.replayIdx+1;
-                        // hit the top?
-                        if (newIdx >= replayLength()) { return; }
-                        pipeline(merge(replays[newIdx], {replayIdx: newIdx}));
-                    } 
+            replay.component({
+                totalReplays: replay.length(),
+                replayIdx: data.replayIdx,
+                goBack: function() {
+                    var newIdx = data.replayIdx-1;
+                    // hit the bottom ?
+                    if (newIdx < 0) { return; }
+                    //pipeline(merge(replay.at([newIdx]))); //, {replayIdx: newIdx}));
+                    pipeline(replay.at(newIdx)); //, {replayIdx: newIdx}));
+                },
+                goForward: function() {
+                    var newIdx = data.replayIdx+1;
+                    // hit the top?
+                    if (newIdx > replay.length()-1) { return; }
+                    //pipeline(merge(replay.at([newIdx]))); //, {replayIdx: newIdx}));
+                    pipeline(replay.at(newIdx)); //, {replayIdx: newIdx}));
+                } 
             }),
             document.getElementById('replay')
         );
     };
  
     ns.main = function() {
-        pipeline(globalState);
+        updateState(globalState);
     };
 
-}(demo));
+}(demo, demo.replay));
 
 if (window.addEventListener) {
     window.addEventListener('load', demo.main, false); //W3C
